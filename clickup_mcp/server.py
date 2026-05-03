@@ -181,8 +181,12 @@ async def create_task(
     """
     body: Dict[str, Any] = {"name": name}
     if description is not None:
-        body["description"] = description
-        body["markdown_description"] = bool(markdown_description)
+        # ClickUp's current API: write markdown via `markdown_content`.
+        # Sending `description` + `markdown_description: true` returns 200 but stores nothing.
+        if markdown_description:
+            body["markdown_content"] = description
+        else:
+            body["description"] = description
     if status is not None:
         body["status"] = status
     if priority is not None:
@@ -226,8 +230,7 @@ async def create_subtask(
         raise RuntimeError("Could not determine list_id from parent task")
     body: Dict[str, Any] = {"name": name, "parent": parent_task_id}
     if description is not None:
-        body["description"] = description
-        body["markdown_description"] = True
+        body["markdown_content"] = description
     if status is not None:
         body["status"] = status
     if priority is not None:
@@ -265,9 +268,14 @@ async def update_task(
     if name is not None:
         body["name"] = name
     if description is not None:
-        body["description"] = description
-    if markdown_description is not None:
-        body["markdown_description"] = bool(markdown_description)
+        # ClickUp's current API: write markdown via `markdown_content`.
+        # Sending `description` + `markdown_description: true` returns 200 but stores nothing.
+        # Default to markdown when the flag is unset (matches create_task).
+        as_markdown = True if markdown_description is None else bool(markdown_description)
+        if as_markdown:
+            body["markdown_content"] = description
+        else:
+            body["description"] = description
     if status is not None:
         body["status"] = status
     if priority is not None:
