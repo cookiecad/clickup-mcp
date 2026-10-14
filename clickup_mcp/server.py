@@ -7,6 +7,7 @@ from fastmcp import FastMCP
 
 from .clickup_api import ClickUpAPIError, ClickUpClient, ClickUpV3Client
 from .config import Settings
+from .redact import RULES_VERSION
 
 
 settings = Settings()
@@ -386,7 +387,8 @@ async def search_tasks(
         if not tasks:
             break
 
-        # Client-side filter: match query in name or description
+        # Client-side filter sees masked responses: credential values cannot be
+        # recovered by searching for them through this tool.
         for task in tasks:
             name = (task.get("name") or "").lower()
             desc = (task.get("description") or "").lower()
@@ -751,4 +753,4 @@ async def clickup_v3_api_request(
 @mcp.tool
 async def health() -> dict:
     """Simple health check (does not call ClickUp)."""
-    return {"ok": True}
+    return {"ok": True, "credential_masking": RULES_VERSION}
