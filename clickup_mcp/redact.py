@@ -19,21 +19,25 @@ GENERIC_LABEL = (
     r"(?:security|verification|login|access|one[ _-]?time|2FA|MFA|backup|recovery)[ _-]?codes?|OTP"
 )
 LABEL = rf"(?:{STRONG_LABEL}|{GENERIC_LABEL})"
-LABEL_NAME = re.compile(rf"\b{LABEL}\b", re.I)
+# Markdown underscores are word characters to regex \b, so use letter/digit
+# boundaries rather than allowing emphasis wrappers to hide a label.
+START = r"(?<![A-Za-z0-9])"
+END = r"(?![A-Za-z0-9])"
+LABEL_NAME = re.compile(rf"{START}{LABEL}{END}", re.I)
 FIELD_NAME = re.compile(rf"{LABEL}", re.I)
-WRAP = r"[\"'`*_]*"
+WRAP = r"[\"'`*_“”‘’]*"
 EXPLICIT_SEPARATOR = (
     rf"{WRAP}\s*(?:[:=|→-]|\bis\b\s*[:=]?)\s*[*_]*\s*"
     # A closing label quote may precede a separately quoted value. Do not
     # consume the value's opener: quoted secrets can contain whitespace.
-    r"(?:[\"'`](?=\s+[\"'`]))?\s*"
+    r"(?:[\"'`“”‘’](?=\s+[\"'`“”‘’]))?\s*"
 )
-VALUE = r'''(?:"[^"\r\n]+"|'[^'\r\n]+'|`[^`\r\n]+`|[^\s|<>"'`]+)'''
+VALUE = r'''(?:"[^"\r\n]+"|'[^'\r\n]+'|`[^`\r\n]+`|“[^”\r\n]+”|‘[^’\r\n]+’|[^\s|<>"'`“”‘’]+)'''
 LABELLED = re.compile(
-    rf"(?P<prefix>\b{LABEL}\b{EXPLICIT_SEPARATOR})(?P<value>{VALUE})", re.I
+    rf"(?P<prefix>{START}{LABEL}{END}{EXPLICIT_SEPARATOR})(?P<value>{VALUE})", re.I
 )
 BARE = re.compile(
-    rf"(?P<prefix>\b(?:{STRONG_LABEL})\b{WRAP}[ \t]+)(?P<value>{VALUE})", re.I
+    rf"(?P<prefix>{START}(?:{STRONG_LABEL}){END}{WRAP}[ \t]+)(?P<value>{VALUE})", re.I
 )
 PROSE = set(
     "reset resets change changed changes update updated manager policy required field fields "
@@ -47,10 +51,10 @@ URL_FIELD = re.compile(
     r"password|signature|sig|auth|authorization)=)(?!\[redacted)[^\s&#\"'<>\\]+", re.I
 )
 SHAPED = re.compile(
-    r"\b(?:eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|"
+    START + r"(?:eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|"
     r"gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,}|AIza[\w-]{35}|"
     r"[sr]k_(?:live|test)_[A-Za-z0-9]{16,}|sk-[A-Za-z0-9_-]{20,}|"
-    r"(?:AKIA|ASIA)[A-Z0-9]{16}|xox[abposr]-[A-Za-z0-9-]{10,})\b"
+    r"(?:AKIA|ASIA)[A-Z0-9]{16}|xox[abposr]-[A-Za-z0-9-]{10,})" + END
 )
 
 
@@ -61,7 +65,7 @@ def _mask_field(match: re.Match[str], *, bare: bool = False) -> str:
     if bare and value in (":", "=", "-", "|", "→"):
         return match[0]
     suffix = ""
-    if value[0] not in "\"'`":
+    if value[0] not in "\"'`“‘":
         suffix = value[len(value.rstrip(".,;:)")):]
     return match["prefix"] + MASK + suffix
 
@@ -88,7 +92,7 @@ def redact_text(text: str) -> str:
     text = re.sub(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----", MASK, text)
     text = LABELLED.sub(_mask_field, text)
     text = BARE.sub(lambda m: _mask_field(m, bare=True), text)
-    text = re.sub(r"\bBearer\s+[A-Za-z0-9._~+/-]+=*", "Bearer " + MASK, text, flags=re.I)
+    text = re.sub(START + r"Bearer\s+[A-Za-z0-9._~+/-]+=*", "Bearer " + MASK, text, flags=re.I)
     return SHAPED.sub(MASK, text)
 
 

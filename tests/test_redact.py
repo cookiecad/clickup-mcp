@@ -52,6 +52,12 @@ def test_shaped_synthetic_credentials(token):
     "Password: `synthetic alpha bravo`",
     '`PIN:` `7391`',
     '"PIN": "7391"',
+    '_PIN_: 7391',
+    '_Password_: "synthetic alpha bravo"',
+    '__PIN__: 7391',
+    '**_PIN_**: 7391',
+    'Password: “synthetic alpha bravo”',
+    'Password: ‘synthetic alpha bravo’',
 ])
 def test_quoted_values_are_masked_in_full(text):
     safe = redact_text(text)
@@ -70,3 +76,8 @@ def test_rich_comment_runs_are_omitted_when_combined_text_has_credential():
     assert all(part["text"] == MASK for part in safe["comment"])
     ordinary = [{"text": "Order "}, {"text": "#4521 shipped"}]
     assert redact_value(ordinary) == ordinary
+
+
+def test_shaped_keys_in_markdown_emphasis():
+    token = "ghp_" + "a" * 32
+    assert token not in redact_text("_" + token + "_")

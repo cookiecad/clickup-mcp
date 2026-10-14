@@ -129,3 +129,16 @@ async def test_rich_fragments_and_multiword_passwords_at_mcp_boundary(monkeypatc
         for secret in ("7391", "synthetic", "alpha", "bravo"):
             assert secret not in output
         assert MASK in output
+
+
+async def test_underscore_wrapped_labels_at_mcp_boundary(monkeypatch):
+    def regression_handler(request):
+        return httpx.Response(200, json={**TASK, "description": '_PIN_: 7391; _Password_: "synthetic alpha bravo"'})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(regression_handler), base_url="https://synthetic.invalid") as transport:
+        monkeypatch.setattr(server.client, "_client", transport)
+        async with Client(server.mcp) as client:
+            result = await client.call_tool("get_task", {"task_id": "synthetic-task"})
+        output = json.dumps([part.model_dump() for part in result.content])
+        for secret in ("7391", "synthetic alpha bravo", "alpha", "bravo"):
+            assert secret not in output
+        assert MASK in output
