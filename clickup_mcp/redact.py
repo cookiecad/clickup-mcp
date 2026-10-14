@@ -22,7 +22,12 @@ LABEL = rf"(?:{STRONG_LABEL}|{GENERIC_LABEL})"
 LABEL_NAME = re.compile(rf"\b{LABEL}\b", re.I)
 FIELD_NAME = re.compile(rf"{LABEL}", re.I)
 WRAP = r"[\"'`*_]*"
-EXPLICIT_SEPARATOR = rf"{WRAP}\s*(?:[:=|→-]|\bis\b\s*[:=]?)\s*{WRAP}\s*"
+EXPLICIT_SEPARATOR = (
+    rf"{WRAP}\s*(?:[:=|→-]|\bis\b\s*[:=]?)\s*[*_]*\s*"
+    # A closing label quote may precede a separately quoted value. Do not
+    # consume the value's opener: quoted secrets can contain whitespace.
+    r"(?:[\"'`](?=\s+[\"'`]))?\s*"
+)
 VALUE = r'''(?:"[^"\r\n]+"|'[^'\r\n]+'|`[^`\r\n]+`|[^\s|<>"'`]+)'''
 LABELLED = re.compile(
     rf"(?P<prefix>\b{LABEL}\b{EXPLICIT_SEPARATOR})(?P<value>{VALUE})", re.I
@@ -92,7 +97,19 @@ def redact_value(value: Any) -> Any:
     if isinstance(value, str):
         return redact_text(value)
     if isinstance(value, list):
-        return [redact_value(item) for item in value]
+        # ClickUp rich comments split visible text across formatting runs.
+        # Masking each run alone misses a label in one run and its value in
+        # the next. If their combined text contains a credential, omit all
+        # text runs; comment_text retains the masked readable alternative.
+        text_runs = [item["text"] for item in value
+                     if isinstance(item, dict) and isinstance(item.get("text"), str)]
+        combined = "".join(text_runs)
+        omit_runs = bool(text_runs) and redact_text(combined) != combined
+        safe = [redact_value(item) for item in value]
+        if omit_runs:
+            return [{**item, "text": MASK} if isinstance(item, dict) and isinstance(item.get("text"), str)
+                    else item for item in safe]
+        return safe
     if isinstance(value, dict):
         credential_field = any(
             isinstance(value.get(key), str) and LABEL_NAME.search(value[key])

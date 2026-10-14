@@ -112,3 +112,20 @@ async def test_debug_and_transport_errors_do_not_echo_credentials(client_type, c
         assert "7391" not in output
         assert "Tr0ub4dor-3" not in output
         assert MASK in output
+
+
+async def test_rich_fragments_and_multiword_passwords_at_mcp_boundary(monkeypatch):
+    def regression_handler(request):
+        return httpx.Response(200, json={"comments": [{
+            "comment_text": 'Portal PIN: 7391; Password: "synthetic alpha bravo"',
+            "comment": [{"text": "Portal "}, {"text": "PIN: "}, {"text": "7391"},
+                        {"text": '; Password: "synthetic '}, {"text": 'alpha bravo"'}],
+        }]})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(regression_handler), base_url="https://synthetic.invalid") as transport:
+        monkeypatch.setattr(server.client, "_client", transport)
+        async with Client(server.mcp) as client:
+            result = await client.call_tool("get_task_comments", {"task_id": "synthetic-task"})
+        output = json.dumps([part.model_dump() for part in result.content])
+        for secret in ("7391", "synthetic", "alpha", "bravo"):
+            assert secret not in output
+        assert MASK in output

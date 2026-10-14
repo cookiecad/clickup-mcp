@@ -44,3 +44,29 @@ def test_nested_custom_fields_and_direct_credential_keys():
 ])
 def test_shaped_synthetic_credentials(token):
     assert redact_text(token) == MASK
+
+
+@pytest.mark.parametrize("text", [
+    'Password: "synthetic alpha bravo"',
+    "Password: 'synthetic alpha bravo'",
+    "Password: `synthetic alpha bravo`",
+    '`PIN:` `7391`',
+    '"PIN": "7391"',
+])
+def test_quoted_values_are_masked_in_full(text):
+    safe = redact_text(text)
+    assert "synthetic" not in safe
+    assert "alpha" not in safe
+    assert "bravo" not in safe
+    assert "7391" not in safe
+    assert MASK in safe
+    assert redact_text(safe) == safe
+
+
+def test_rich_comment_runs_are_omitted_when_combined_text_has_credential():
+    safe = redact_value({"comment": [{"text": "Portal PIN: ", "attributes": {"bold": True}}, {"text": "7391"}]})
+    assert "7391" not in json.dumps(safe)
+    assert safe["comment"][0]["attributes"] == {"bold": True}
+    assert all(part["text"] == MASK for part in safe["comment"])
+    ordinary = [{"text": "Order "}, {"text": "#4521 shipped"}]
+    assert redact_value(ordinary) == ordinary
