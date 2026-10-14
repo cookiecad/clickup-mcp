@@ -5,6 +5,8 @@ from typing import Any, Mapping
 
 import httpx
 
+from .redact import redact_text, redact_value
+
 
 class ClickUpAPIError(RuntimeError):
     def __init__(self, message: str, *, status_code: int | None = None, details: Any = None) -> None:
@@ -44,12 +46,12 @@ class ClickUpClient:
             path = "/" + path
         try:
             if self._debug_http:
-                q = f" params={json.dumps(params, default=str)[:1000]}" if params else ""
-                b = f" body={json.dumps(json_body, default=str)[:1000]}" if json_body is not None else ""
-                print(f"[clickup] {method.upper()} {path}{q}{b}")
+                q = f" params={redact_text(json.dumps(redact_value(params), default=str))[:1000]}" if params else ""
+                b = f" body={redact_text(json.dumps(redact_value(json_body), default=str))[:1000]}" if json_body is not None else ""
+                print(f"[clickup] {method.upper()} {redact_text(path)}{q}{b}")
             resp = await self._client.request(method.upper(), path, params=params, json=json_body)
-        except httpx.RequestError as e:
-            raise ClickUpAPIError(f"ClickUp request failed: {e!s}") from e
+        except httpx.RequestError:
+            raise ClickUpAPIError("ClickUp request failed (transport error)") from None
 
         content_type = (resp.headers.get("content-type") or "").lower()
         data: Any = None
@@ -61,8 +63,9 @@ class ClickUpClient:
         else:
             data = resp.text
 
+        data = redact_value(data)
         if resp.status_code >= 400:
-            msg = f"ClickUp API error {resp.status_code} for {method.upper()} {path}"
+            msg = f"ClickUp API error {resp.status_code} for {method.upper()} {redact_text(path)}"
             if isinstance(data, dict) and data.get("err"):
                 msg = f"{msg}: {data.get('err')}"
             raise ClickUpAPIError(msg, status_code=resp.status_code, details=data)
@@ -101,12 +104,12 @@ class ClickUpV3Client:
             path = "/" + path
         try:
             if self._debug_http:
-                q = f" params={json.dumps(params, default=str)[:1000]}" if params else ""
-                b = f" body={json.dumps(json_body, default=str)[:1000]}" if json_body is not None else ""
-                print(f"[clickup-v3] {method.upper()} {path}{q}{b}")
+                q = f" params={redact_text(json.dumps(redact_value(params), default=str))[:1000]}" if params else ""
+                b = f" body={redact_text(json.dumps(redact_value(json_body), default=str))[:1000]}" if json_body is not None else ""
+                print(f"[clickup-v3] {method.upper()} {redact_text(path)}{q}{b}")
             resp = await self._client.request(method.upper(), path, params=params, json=json_body)
-        except httpx.RequestError as e:
-            raise ClickUpAPIError(f"ClickUp v3 request failed: {e!s}") from e
+        except httpx.RequestError:
+            raise ClickUpAPIError("ClickUp v3 request failed (transport error)") from None
 
         content_type = (resp.headers.get("content-type") or "").lower()
         data: Any = None
@@ -118,8 +121,9 @@ class ClickUpV3Client:
         else:
             data = resp.text
 
+        data = redact_value(data)
         if resp.status_code >= 400:
-            msg = f"ClickUp v3 API error {resp.status_code} for {method.upper()} {path}"
+            msg = f"ClickUp v3 API error {resp.status_code} for {method.upper()} {redact_text(path)}"
             if isinstance(data, dict):
                 err_msg = data.get("message") or data.get("err")
                 if err_msg:
